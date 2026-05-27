@@ -76,7 +76,7 @@ import GoalsPage from "./assets/pages/jamb/GoalsPage";
 import AnalyticsPage from "./assets/pages/jamb/AnalyticsPage";
 import StudyPlannerPage from "./assets/pages/jamb/StudyPlannerPage";
 import JambAITutor from "./assets/pages/jamb/JambAITutor";
-import JambLeaderboard from "./assets/pages/jamb/JambLeaderBoard";
+import JambLeaderboard from "./assets/pages/jamb/JambLeaderboard";
 import Achievements from "./assets/pages/jamb/JambAchievements";
 import FullMockExam from "./assets/pages/jamb/FullMockExam";
 import FullMockSetup from "./assets/pages/jamb/FullMockSetup";
