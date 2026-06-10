@@ -1,5 +1,6 @@
 import React, {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -18,6 +19,7 @@ import {
 
 import {
   useFlutterwave,
+  closePaymentModal,
 } from "flutterwave-react-v3";
 
 import {
@@ -56,6 +58,9 @@ export default function PremiumSubscriptionPage({
   const [daysLeft, setDaysLeft] =
     useState(null);
 
+  const API_URL =
+    import.meta.env.VITE_API_URL;
+
   // ======================================================
   // PLAN
   // ======================================================
@@ -92,13 +97,14 @@ export default function PremiumSubscriptionPage({
   // PRICE
   // ======================================================
 
-  const amount =
-    billing === "monthly"
+  const amount = useMemo(() => {
+    return billing === "monthly"
       ? studentPlan.monthlyPrice
       : studentPlan.yearlyPrice;
+  }, [billing]);
 
   // ======================================================
-  // AUTO CHECK + EXPIRE SUBSCRIPTION
+  // CHECK SUBSCRIPTION STATUS
   // ======================================================
 
   const checkSubscriptionStatus =
@@ -116,7 +122,8 @@ export default function PremiumSubscriptionPage({
         const snap =
           await getDoc(userRef);
 
-        if (!snap.exists()) return;
+        if (!snap.exists())
+          return;
 
         const data = snap.data();
 
@@ -168,6 +175,8 @@ export default function PremiumSubscriptionPage({
 
               premium: false,
 
+              verified: false,
+
               subscriptionStatus:
                 "expired",
             });
@@ -178,7 +187,7 @@ export default function PremiumSubscriptionPage({
           }
 
           // ======================================================
-          // CALCULATE DAYS LEFT
+          // DAYS LEFT
           // ======================================================
 
           const diff =
@@ -199,7 +208,10 @@ export default function PremiumSubscriptionPage({
           );
         }
       } catch (error) {
-        console.log(error);
+        console.log(
+          "Subscription check error:",
+          error
+        );
       }
     };
 
@@ -288,219 +300,238 @@ export default function PremiumSubscriptionPage({
                 response
               );
 
+              // CLOSE MODAL
+              closePaymentModal();
+
               // ======================================================
               // SUCCESS
               // ======================================================
 
               if (
-                response.status ===
+                response.status !==
                 "successful"
               ) {
-                // ======================================================
-                // VERIFY PAYMENT
-                // ======================================================
-
-                const verify =
-                  await fetch(
-                    "http://localhost:5000/api/payments/verify-payment",
-                    {
-                      method:
-                        "POST",
-
-                      headers: {
-                        "Content-Type":
-                          "application/json",
-                      },
-
-                      body: JSON.stringify(
-                        {
-                          transaction_id:
-                            response.transaction_id,
-
-                          userId:
-                            auth.currentUser.uid,
-
-                          plan:
-                            studentPlan.name,
-
-                          billing,
-
-                          amount,
-                        }
-                      ),
-                    }
-                  );
-
-                const data =
-                  await verify.json();
-
-                console.log(
-                  data
-                );
-
-                // ======================================================
-                // VERIFIED
-                // ======================================================
-
-                if (
-                  data.success
-                ) {
-                  // ======================================================
-                  // DATES
-                  // ======================================================
-
-                  const now =
-                    new Date();
-
-                  const expiresAt =
-                    new Date();
-
-                  // MONTHLY
-
-                  if (
-                    billing ===
-                    "monthly"
-                  ) {
-                    expiresAt.setDate(
-                      expiresAt.getDate() +
-                        30
-                    );
-                  }
-
-                  // YEARLY
-
-                  if (
-                    billing ===
-                    "yearly"
-                  ) {
-                    expiresAt.setFullYear(
-                      expiresAt.getFullYear() +
-                        1
-                    );
-                  }
-
-                  // ======================================================
-                  // SAVE SUBSCRIPTION
-                  // ======================================================
-
-                  await setDoc(
-                    doc(
-                      db,
-                      "users",
-                      auth
-                        .currentUser
-                        .uid
-                    ),
-                    {
-                      premium:
-                        true,
-
-                      verified:
-                        true,
-
-                      subscriptionPlan:
-                        "student-premium",
-
-                      subscriptionBilling:
-                        billing,
-
-                      subscriptionAmount:
-                        amount,
-
-                      subscriptionStatus:
-                        "active",
-
-                      subscriptionExpired:
-                        false,
-
-                      transactionId:
-                        response.transaction_id,
-
-                      paymentReference:
-                        response.tx_ref,
-
-                      subscriptionDate:
-                        serverTimestamp(),
-
-                      subscriptionStart:
-                        Timestamp.fromDate(
-                          now
-                        ),
-
-                      subscriptionExpiresAt:
-                        Timestamp.fromDate(
-                          expiresAt
-                        ),
-
-                      updatedAt:
-                        serverTimestamp(),
-                    },
-                    {
-                      merge: true,
-                    }
-                  );
-
-                  // ======================================================
-                  // UPDATE UI
-                  // ======================================================
-
-                  setSubscriptionData(
-                    {
-                      premium:
-                        true,
-
-                      subscriptionStatus:
-                        "active",
-
-                      subscriptionBilling:
-                        billing,
-
-                      subscriptionExpiresAt:
-                        Timestamp.fromDate(
-                          expiresAt
-                        ),
-                    }
-                  );
-
-                  // ======================================================
-                  // DAYS LEFT
-                  // ======================================================
-
-                  const remainingDays =
-                    Math.ceil(
-                      (expiresAt.getTime() -
-                        now.getTime()) /
-                        (1000 *
-                          60 *
-                          60 *
-                          24)
-                    );
-
-                  setDaysLeft(
-                    remainingDays
-                  );
-
-                  alert(
-                    `Student Premium activated successfully 🚀`
-                  );
-                } else {
-                  alert(
-                    data.error ||
-                      "Payment verification failed"
-                  );
-                }
-              } else {
                 alert(
                   "Payment not successful"
                 );
+
+                setLoadingPlan(
+                  false
+                );
+
+                return;
               }
 
+              // ======================================================
+              // VERIFY PAYMENT
+              // ======================================================
+
+              const verify =
+                await fetch(
+                  `${API_URL}/api/payments/verify-payment`,
+                  {
+                    method:
+                      "POST",
+
+                    headers: {
+                      "Content-Type":
+                        "application/json",
+                    },
+
+                    body: JSON.stringify(
+                      {
+                        transaction_id:
+                          response.transaction_id,
+
+                        userId:
+                          auth.currentUser.uid,
+
+                        plan:
+                          studentPlan.name,
+
+                        billing,
+
+                        amount,
+                      }
+                    ),
+                  }
+                );
+
+              // ======================================================
+              // RESPONSE ERROR
+              // ======================================================
+
+              if (!verify.ok) {
+                throw new Error(
+                  "Verification request failed"
+                );
+              }
+
+              const data =
+                await verify.json();
+
+              console.log(
+                "Verification:",
+                data
+              );
+
+              // ======================================================
+              // VERIFIED
+              // ======================================================
+
+              if (
+                data.success
+              ) {
+                const now =
+                  new Date();
+
+                const expiresAt =
+                  new Date();
+
+                // MONTHLY
+
+                if (
+                  billing ===
+                  "monthly"
+                ) {
+                  expiresAt.setDate(
+                    expiresAt.getDate() +
+                      30
+                  );
+                }
+
+                // YEARLY
+
+                if (
+                  billing ===
+                  "yearly"
+                ) {
+                  expiresAt.setFullYear(
+                    expiresAt.getFullYear() +
+                      1
+                  );
+                }
+
+                // ======================================================
+                // SAVE TO FIRESTORE
+                // ======================================================
+
+                const userRef = doc(
+                  db,
+                  "users",
+                  auth.currentUser.uid
+                );
+
+                await setDoc(
+                  userRef,
+                  {
+                    premium:
+                      true,
+
+                    verified:
+                      true,
+
+                    subscriptionPlan:
+                      "student-premium",
+
+                    subscriptionBilling:
+                      billing,
+
+                    subscriptionAmount:
+                      amount,
+
+                    subscriptionStatus:
+                      "active",
+
+                    subscriptionExpired:
+                      false,
+
+                    transactionId:
+                      response.transaction_id,
+
+                    paymentReference:
+                      response.tx_ref,
+
+                    subscriptionDate:
+                      serverTimestamp(),
+
+                    subscriptionStart:
+                      Timestamp.fromDate(
+                        now
+                      ),
+
+                    subscriptionExpiresAt:
+                      Timestamp.fromDate(
+                        expiresAt
+                      ),
+
+                    updatedAt:
+                      serverTimestamp(),
+                  },
+                  {
+                    merge: true,
+                  }
+                );
+
+                // ======================================================
+                // UPDATE UI
+                // ======================================================
+
+                setSubscriptionData(
+                  {
+                    premium:
+                      true,
+
+                    verified:
+                      true,
+
+                    subscriptionBilling:
+                      billing,
+
+                    subscriptionStatus:
+                      "active",
+
+                    subscriptionExpiresAt:
+                      Timestamp.fromDate(
+                        expiresAt
+                      ),
+                  }
+                );
+
+                // ======================================================
+                // CALCULATE DAYS LEFT
+                // ======================================================
+
+                const remainingDays =
+                  Math.ceil(
+                    (expiresAt.getTime() -
+                      now.getTime()) /
+                      (1000 *
+                        60 *
+                        60 *
+                        24)
+                  );
+
+                setDaysLeft(
+                  remainingDays
+                );
+
+                alert(
+                  "Student Premium activated successfully 🚀"
+                );
+              } else {
+                alert(
+                  data.error ||
+                    "Payment verification failed"
+                );
+              }
 
               setLoadingPlan(
                 false
               );
             } catch (error) {
               console.log(
+                "Verification error:",
                 error
               );
 
@@ -511,7 +542,6 @@ export default function PremiumSubscriptionPage({
               setLoadingPlan(
                 false
               );
-
             }
           },
 
@@ -522,7 +552,10 @@ export default function PremiumSubscriptionPage({
           },
         });
       } catch (error) {
-        console.log(error);
+        console.log(
+          "Subscription error:",
+          error
+        );
 
         setLoadingPlan(false);
 
@@ -591,9 +624,7 @@ export default function PremiumSubscriptionPage({
             student features.
           </p>
 
-          {/* ======================================================
-              STATUS CARD
-          ====================================================== */}
+          {/* STATUS CARD */}
 
           {subscriptionData
             ?.premium && (
@@ -621,7 +652,7 @@ export default function PremiumSubscriptionPage({
                 </span>
               </div>
 
-              <p className="opacity-70 mt-3 text-sm">
+              <p className="opacity-70 mt-3 text-sm capitalize">
                 Billing Plan:{" "}
                 {
                   subscriptionData.subscriptionBilling
@@ -630,9 +661,7 @@ export default function PremiumSubscriptionPage({
             </div>
           )}
 
-          {/* ======================================================
-              EXPIRED
-          ====================================================== */}
+          {/* EXPIRED */}
 
           {subscriptionData
             ?.subscriptionStatus ===
@@ -652,9 +681,7 @@ export default function PremiumSubscriptionPage({
             </div>
           )}
 
-          {/* ======================================================
-              BILLING TOGGLE
-          ====================================================== */}
+          {/* BILLING TOGGLE */}
 
           <div
             className={`mt-10 inline-flex items-center p-2 rounded-2xl ${glass}`}
@@ -693,9 +720,7 @@ export default function PremiumSubscriptionPage({
           </div>
         </div>
 
-        {/* ======================================================
-            PRICING CARD
-        ====================================================== */}
+        {/* PRICING CARD */}
 
         <div className="max-w-2xl mx-auto mt-20">
           <div
@@ -782,9 +807,7 @@ export default function PremiumSubscriptionPage({
                 )}
               </div>
 
-              {/* ======================================================
-                  BUTTON
-              ====================================================== */}
+              {/* BUTTON */}
 
               <button
                 onClick={
@@ -815,9 +838,7 @@ export default function PremiumSubscriptionPage({
           </div>
         </div>
 
-        {/* ======================================================
-            EXTRA FEATURES
-        ====================================================== */}
+        {/* EXTRA FEATURES */}
 
         <div className="grid md:grid-cols-3 gap-6 mt-24">
           {[
