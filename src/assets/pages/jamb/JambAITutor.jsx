@@ -168,35 +168,40 @@ const JambAITutor = ({
           }
 
           try {
-            const subRef = doc(
-              db,
-              "subscriptions",
-              user.uid
-            );
+            const [subSnap, userSnap] = await Promise.all([
+              getDoc(
+                doc(
+                  db,
+                  "subscriptions",
+                  user.uid
+                )
+              ),
+              getDoc(
+                doc(
+                  db,
+                  "users",
+                  user.uid
+                )
+              ),
+            ]);
 
-            const subSnap =
-              await getDoc(
-                subRef
-              );
+            const data = subSnap.exists()
+              ? subSnap.data()
+              : {};
+            const userData = userSnap.exists()
+              ? userSnap.data()
+              : {};
 
-            if (
-              !subSnap.exists()
-            ) {
-              redirectToSubscription(
-                "AI Tutor is available exclusively for active UniHelp Premium members."
-              );
-
-              return;
-            }
-
-            const data =
-              subSnap.data();
-
-            const subscription =
-              data?.subscription;
+            const subscription = data?.subscription;
 
             const isActive =
-              subscription?.active;
+              subscription?.active === true ||
+              data?.premium === true ||
+              data?.verified === true ||
+              data?.subscriptionStatus === "active" ||
+              userData?.premium === true ||
+              userData?.verified === true ||
+              userData?.subscriptionStatus === "active";
 
             if (
               !isActive

@@ -1,30 +1,75 @@
 import React, {
+  useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 
 import {
   ArrowLeft,
-  BookOpen,
-  BrainCircuit,
-  Clock3,
+  Crown,
   Download,
-  Eye,
   FileText,
   Filter,
-  PlayCircle,
+  Lock,
   Search,
+  Sparkles,
   Star,
+  Trash2,
+  UploadCloud,
   Video,
-  ChevronRight,
+  BookOpen,
+  BrainCircuit,
+  Eye,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  ShieldCheck,
+  FolderOpen,
+  CalendarDays,
+  CloudUpload,
 } from "lucide-react";
+
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
+
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "firebase/storage";
+
+import {
+  db,
+  storage,
+} from "../../../firebase/config";
 
 import { useNavigate } from "react-router-dom";
 
+import { AuthContext } from "../../context/AuthContext";
+
 const JambStudyMaterials = ({
-  dark,
+  dark = true,
 }) => {
   const navigate = useNavigate();
+
+  const { user } =
+    useContext(AuthContext);
+
+  /**
+   * =========================================================
+   * STATES
+   * =========================================================
+   */
 
   const [search, setSearch] =
     useState("");
@@ -34,10 +79,56 @@ const JambStudyMaterials = ({
     setActiveCategory,
   ] = useState("All");
 
+  const [materials, setMaterials] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [uploading, setUploading] =
+    useState(false);
+
+  const [deletingId, setDeletingId] =
+    useState("");
+
+  const [premiumLoading, setPremiumLoading] =
+    useState(true);
+
+  const [isPremium, setIsPremium] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
   /**
-   * =========================
+   * =========================================================
+   * ADMIN CHECK
+   * =========================================================
+   */
+
+  const isAdmin =
+    user?.email ===
+    "onakomayaokiki@gmail.com";
+
+  /**
+   * =========================================================
+   * FORM
+   * =========================================================
+   */
+
+  const [form, setForm] =
+    useState({
+      title: "",
+      type: "PDF",
+      subject: "",
+      description: "",
+      file: null,
+    });
+
+  /**
+   * =========================================================
    * CATEGORIES
-   * =========================
+   * =========================================================
    */
 
   const categories = [
@@ -49,113 +140,289 @@ const JambStudyMaterials = ({
   ];
 
   /**
-   * =========================
-   * MATERIALS
-   * =========================
+/**
+ * =========================================================
+ * CHECK PREMIUM
+ * =========================================================
+ */
+
+  const checkPremium = async () => {
+    try {
+
+      if (!user?.uid) {
+        setPremiumLoading(false);
+      return;
+    }
+
+    const subRef = doc(
+      db,
+      "subscriptions",
+      user.uid,
+    );
+
+      const subSnap =
+        await getDoc(subRef);
+
+      const userRef = doc(
+        db,
+        "users",
+        user.uid
+      );
+
+      const userSnap =
+        await getDoc(userRef);
+
+      const subData =
+        subSnap.exists()
+          ? subSnap.data()
+          : {};
+
+      const userData =
+        userSnap.exists()
+          ? userSnap.data()
+          : {};
+
+      setIsPremium(
+        subData?.subscription
+          ?.active === true ||
+          userData?.premium === true ||
+          userData?.verified === true ||
+          userData?.subscriptionStatus ===
+            "active"
+      );
+
+  } catch (error) {
+
+    console.log(error);
+
+    setIsPremium(false);
+
+  } finally {
+
+    setPremiumLoading(false);
+
+  }
+};
+  /**
+   * =========================================================
+   * FETCH MATERIALS
+   * =========================================================
    */
 
-  const materials = [
-    {
-      title:
-        "English Masterclass",
-      type: "PDF",
-      subject: "English",
-      lessons: 28,
-      downloads: "12.4k",
-      rating: 4.9,
-      color:
-        "from-indigo-500 to-cyan-500",
-      icon: (
-        <BookOpen size={22} />
-      ),
-    },
+  const fetchMaterials =
+    async () => {
+      try {
+        setLoading(true);
 
-    {
-      title:
-        "Mathematics Formula Handbook",
-      type: "Notes",
-      subject:
-        "Mathematics",
-      lessons: 16,
-      downloads: "8.2k",
-      rating: 4.8,
-      color:
-        "from-purple-500 to-pink-500",
-      icon: (
-        <BrainCircuit
-          size={22}
-        />
-      ),
-    },
+        const q = query(
+          collection(
+            db,
+            "study_materials",
+          ),
+          orderBy(
+            "createdAt",
+            "desc",
+          ),
+        );
 
-    {
-      title:
-        "Physics CBT Crash Course",
-      type: "Video",
-      subject: "Physics",
-      lessons: 34,
-      downloads: "6.8k",
-      rating: 4.7,
-      color:
-        "from-cyan-500 to-blue-500",
-      icon: (
-        <Video size={22} />
-      ),
-    },
+        const snap =
+          await getDocs(q);
 
-    {
-      title:
-        "Chemistry Revision Pack",
-      type: "PDF",
-      subject:
-        "Chemistry",
-      lessons: 20,
-      downloads: "9.1k",
-      rating: 4.9,
-      color:
-        "from-orange-500 to-red-500",
-      icon: (
-        <FileText size={22} />
-      ),
-    },
+        const arr = [];
 
-    {
-      title:
-        "Biology Study Notes",
-      type: "Notes",
-      subject: "Biology",
-      lessons: 19,
-      downloads: "11.7k",
-      rating: 4.8,
-      color:
-        "from-green-500 to-emerald-500",
-      icon: (
-        <BookOpen size={22} />
-      ),
-    },
+        snap.forEach((doc) => {
+          arr.push({
+            id: doc.id,
+            ...doc.data(),
+          });
+        });
 
-    {
-      title:
-        "How To Score 300+",
-      type: "CBT Guide",
-      subject: "General",
-      lessons: 12,
-      downloads: "20.5k",
-      rating: 5.0,
-      color:
-        "from-yellow-500 to-orange-500",
-      icon: (
-        <PlayCircle
-          size={22}
-        />
-      ),
-    },
-  ];
+        setMaterials(arr);
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  useEffect(() => {
+    fetchMaterials();
+    checkPremium();
+  }, [user]);
 
   /**
-   * =========================
-   * FILTER
-   * =========================
+   * =========================================================
+   * UPLOAD MATERIAL
+   * =========================================================
+   */
+
+  const handleUpload =
+    async () => {
+      try {
+        if (
+          !form.title ||
+          !form.subject ||
+          !form.description ||
+          !form.file
+        ) {
+          setMessage(
+            "Please fill all fields",
+          );
+
+          return;
+        }
+
+        setUploading(true);
+
+        /**
+         * STORAGE
+         */
+
+        const fileName = `${Date.now()}-${
+          form.file.name
+        }`;
+
+        const storageRef = ref(
+          storage,
+          `study-materials/${fileName}`,
+        );
+
+        await uploadBytes(
+          storageRef,
+          form.file,
+        );
+
+        const fileUrl =
+          await getDownloadURL(
+            storageRef,
+          );
+
+        /**
+         * FIRESTORE
+         */
+
+        await addDoc(
+          collection(
+            db,
+            "study_materials",
+          ),
+          {
+            title: form.title,
+            type: form.type,
+            subject:
+              form.subject,
+            description:
+              form.description,
+            fileUrl,
+            fileName:
+              form.file.name,
+            fileSize:
+              form.file.size,
+            createdAt:
+              serverTimestamp(),
+            uploadedBy:
+              user?.email || "",
+          },
+        );
+
+        setMessage(
+          "Material uploaded successfully 🚀",
+        );
+
+        setForm({
+          title: "",
+          type: "PDF",
+          subject: "",
+          description: "",
+          file: null,
+        });
+
+        fetchMaterials();
+      } catch (error) {
+        console.log(error);
+
+        setMessage(
+          "Upload failed",
+        );
+      } finally {
+        setUploading(false);
+
+        setTimeout(() => {
+          setMessage("");
+        }, 4000);
+      }
+    };
+
+  /**
+   * =========================================================
+   * DELETE
+   * =========================================================
+   */
+
+  const handleDelete =
+    async (id) => {
+      try {
+        setDeletingId(id);
+
+        await deleteDoc(
+          doc(
+            db,
+            "study_materials",
+            id,
+          ),
+        );
+
+        setMaterials((prev) =>
+          prev.filter(
+            (item) =>
+              item.id !== id,
+          ),
+        );
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setDeletingId("");
+      }
+    };
+
+  /**
+   * =========================================================
+   * DOWNLOAD
+   * =========================================================
+   */
+
+  const handleDownload =
+    (material) => {
+      if (!user) {
+        setMessage(
+          "Please login first",
+        );
+
+        return;
+      }
+
+      /**
+       * PREMIUM CHECK
+       */
+
+      if (!isPremium) {
+        setMessage(
+          "Only premium users can download materials 🚀",
+        );
+
+        return;
+      }
+
+      window.open(
+        material.fileUrl,
+        "_blank",
+      );
+    };
+
+  /**
+   * =========================================================
+   * FILTER MATERIALS
+   * =========================================================
    */
 
   const filteredMaterials =
@@ -164,12 +431,12 @@ const JambStudyMaterials = ({
         (item) => {
           const matchesSearch =
             item.title
-              .toLowerCase()
+              ?.toLowerCase()
               .includes(
                 search.toLowerCase(),
               ) ||
             item.subject
-              .toLowerCase()
+              ?.toLowerCase()
               .includes(
                 search.toLowerCase(),
               );
@@ -187,18 +454,19 @@ const JambStudyMaterials = ({
         },
       );
     }, [
+      materials,
       search,
       activeCategory,
     ]);
 
   /**
-   * =========================
+   * =========================================================
    * THEME
-   * =========================
+   * =========================================================
    */
 
   const bg = dark
-    ? "bg-[#0f172a] text-white"
+    ? "bg-[#020817] text-white"
     : "bg-slate-100 text-slate-900";
 
   const card = dark
@@ -210,79 +478,324 @@ const JambStudyMaterials = ({
     : "text-slate-500";
 
   const input = dark
-    ? "bg-white/5 border-white/10 text-white placeholder:text-slate-500"
-    : "bg-white border-slate-200 text-slate-900 placeholder:text-slate-400";
+    ? "bg-white/5 border border-white/10 text-white placeholder:text-slate-500"
+    : "bg-white border border-slate-200 text-slate-900";
 
   return (
     <div
-      className={`min-h-screen w-full ${bg}`}
+      className={`min-h-screen overflow-hidden relative ${bg}`}
     >
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6">
-        {/* ========================= */}
-        {/* HEADER */}
-        {/* ========================= */}
+      {/* ========================================================= */}
+      {/* BACKGROUND */}
+      {/* ========================================================= */}
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="fixed top-0 left-0 w-72 h-72 bg-indigo-500/20 blur-3xl rounded-full" />
+
+      <div className="fixed bottom-0 right-0 w-72 h-72 bg-purple-500/20 blur-3xl rounded-full" />
+
+      {/* ========================================================= */}
+      {/* MAIN */}
+      {/* ========================================================= */}
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 py-6">
+        {/* ========================================================= */}
+        {/* HEADER */}
+        {/* ========================================================= */}
+
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6 mb-8">
           {/* LEFT */}
 
-          <div className="flex items-start sm:items-center gap-3 min-w-0">
+          <div className="flex items-start gap-4">
             <button
               onClick={() =>
                 navigate(-1)
               }
-              className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                dark
-                  ? "bg-white/10 hover:bg-white/20"
-                  : "bg-white hover:bg-slate-200"
-              }`}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-all ${card}`}
             >
-              <ArrowLeft
-                size={20}
-              />
+              <ArrowLeft />
             </button>
 
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight">
+            <div>
+              <h1 className="text-3xl md:text-5xl font-black leading-tight">
                 Study Materials
               </h1>
 
               <p
-                className={`text-sm sm:text-base ${fade}`}
+                className={`mt-2 text-sm md:text-base ${fade}`}
               >
-                PDFs, videos,
-                notes and CBT
-                guides
+                Premium learning
+                resources for
+                students
               </p>
             </div>
           </div>
 
-          {/* RIGHT */}
+          {/* STATUS */}
 
           <div
-            className={`flex items-center justify-center sm:justify-start gap-2 px-4 py-3 rounded-2xl ${card}`}
+            className={`rounded-[28px] p-5 flex items-center gap-4 ${card}`}
           >
-            <BookOpen
-              size={18}
-              className="text-indigo-500"
-            />
+            {premiumLoading ? (
+              <Loader2 className="animate-spin" />
+            ) : isPremium ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="text-green-500" />
+                </div>
 
-            <span className="font-semibold text-sm sm:text-base">
-              {
-                filteredMaterials.length
-              }{" "}
-              Materials
-            </span>
+                <div>
+                  <h3 className="font-black text-lg">
+                    Premium Active
+                  </h3>
+
+                  <p
+                    className={`text-sm ${fade}`}
+                  >
+                    Unlimited
+                    downloads
+                    unlocked
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-yellow-500/10 flex items-center justify-center">
+                  <Lock className="text-yellow-500" />
+                </div>
+
+                <div>
+                  <h3 className="font-black text-lg">
+                    Premium Locked
+                  </h3>
+
+                  <p
+                    className={`text-sm ${fade}`}
+                  >
+                    Upgrade to
+                    download
+                    materials
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* ========================= */}
-        {/* SEARCH */}
-        {/* ========================= */}
+        {/* ========================================================= */}
+        {/* MESSAGE */}
+        {/* ========================================================= */}
 
-        <div className="relative mb-5">
+        {message && (
+          <div
+            className={`mb-6 rounded-2xl p-4 flex items-center gap-3 ${
+              message.includes(
+                "success",
+              )
+                ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                : "bg-red-500/10 border border-red-500/20 text-red-400"
+            }`}
+          >
+            {message.includes(
+              "success",
+            ) ? (
+              <CheckCircle2 />
+            ) : (
+              <XCircle />
+            )}
+
+            <span className="font-medium">
+              {message}
+            </span>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* ADMIN PANEL */}
+        {/* ========================================================= */}
+
+        {isAdmin && (
+          <div
+            className={`rounded-[36px] p-6 md:p-8 mb-8 ${card}`}
+          >
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 flex items-center justify-center">
+                <CloudUpload className="text-indigo-500" />
+              </div>
+
+              <div>
+                <h2 className="text-3xl font-black">
+                  Admin Upload
+                  Panel
+                </h2>
+
+                <p
+                  className={`${fade} mt-1`}
+                >
+                  Upload premium
+                  study materials
+                </p>
+              </div>
+            </div>
+
+            {/* FORM */}
+
+            <div className="grid md:grid-cols-2 gap-5">
+              {/* TITLE */}
+
+              <input
+                type="text"
+                placeholder="Material title"
+                value={
+                  form.title
+                }
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    title:
+                      e.target
+                        .value,
+                  })
+                }
+                className={`h-14 px-5 rounded-2xl outline-none ${input}`}
+              />
+
+              {/* SUBJECT */}
+
+              <input
+                type="text"
+                placeholder="Subject"
+                value={
+                  form.subject
+                }
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    subject:
+                      e.target
+                        .value,
+                  })
+                }
+                className={`h-14 px-5 rounded-2xl outline-none ${input}`}
+              />
+
+              {/* TYPE */}
+
+              <select
+                value={
+                  form.type
+                }
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    type: e.target
+                      .value,
+                  })
+                }
+                className={`h-14 px-5 rounded-2xl outline-none ${input}`}
+              >
+                <option value="PDF">
+                  PDF
+                </option>
+
+                <option value="Video">
+                  Video
+                </option>
+
+                <option value="Notes">
+                  Notes
+                </option>
+
+                <option value="CBT Guide">
+                  CBT Guide
+                </option>
+              </select>
+
+              {/* FILE */}
+
+              <label
+                className={`h-14 px-5 rounded-2xl flex items-center gap-3 cursor-pointer ${input}`}
+              >
+                <UploadCloud
+                  size={18}
+                />
+
+                <span className="truncate">
+                  {form.file
+                    ? form.file
+                        .name
+                    : "Choose File"}
+                </span>
+
+                <input
+                  type="file"
+                  hidden
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      file:
+                        e.target
+                          .files[0],
+                    })
+                  }
+                />
+              </label>
+
+              {/* DESCRIPTION */}
+
+              <textarea
+                rows="5"
+                placeholder="Description..."
+                value={
+                  form.description
+                }
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    description:
+                      e.target
+                        .value,
+                  })
+                }
+                className={`md:col-span-2 p-5 rounded-2xl outline-none resize-none ${input}`}
+              />
+            </div>
+
+            {/* BUTTON */}
+
+            <button
+              onClick={
+                handleUpload
+              }
+              disabled={
+                uploading
+              }
+              className="mt-6 h-14 px-8 rounded-2xl bg-indigo-500 hover:bg-indigo-600 transition-all text-white font-bold flex items-center justify-center gap-3"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="animate-spin" />
+
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <UploadCloud />
+
+                  Upload Material
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* SEARCH */}
+        {/* ========================================================= */}
+
+        <div className="relative mb-6">
           <Search
             size={18}
-            className={`absolute left-4 top-1/2 -translate-y-1/2 ${fade}`}
+            className={`absolute left-5 top-1/2 -translate-y-1/2 ${fade}`}
           />
 
           <input
@@ -294,24 +807,24 @@ const JambStudyMaterials = ({
                 e.target.value,
               )
             }
-            className={`w-full h-12 sm:h-14 rounded-2xl border pl-11 pr-4 text-sm sm:text-base outline-none transition-all ${input}`}
+            className={`w-full h-14 rounded-2xl pl-14 pr-5 outline-none ${input}`}
           />
         </div>
 
-        {/* ========================= */}
+        {/* ========================================================= */}
         {/* FILTERS */}
-        {/* ========================= */}
+        {/* ========================================================= */}
 
-        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide pb-2 mb-6">
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 mb-8 scrollbar-hide">
           <div
-            className={`min-w-fit flex items-center gap-2 px-4 h-11 rounded-xl shrink-0 ${card}`}
+            className={`h-12 px-5 rounded-2xl flex items-center gap-2 shrink-0 ${card}`}
           >
             <Filter
               size={16}
               className="text-indigo-500"
             />
 
-            <span className="text-sm font-semibold">
+            <span className="font-semibold">
               Filter
             </span>
           </div>
@@ -328,13 +841,11 @@ const JambStudyMaterials = ({
                     category,
                   )
                 }
-                className={`min-w-fit px-5 h-11 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+                className={`h-12 px-5 rounded-2xl text-sm font-semibold shrink-0 transition-all ${
                   activeCategory ===
                   category
                     ? "bg-indigo-500 text-white"
-                    : dark
-                    ? "bg-white/5 border border-white/10 hover:bg-white/10"
-                    : "bg-white border border-slate-200 hover:bg-slate-100"
+                    : card
                 }`}
               >
                 {category}
@@ -343,179 +854,240 @@ const JambStudyMaterials = ({
           )}
         </div>
 
-        {/* ========================= */}
-        {/* MATERIALS */}
-        {/* ========================= */}
+        {/* ========================================================= */}
+        {/* LOADING */}
+        {/* ========================================================= */}
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {filteredMaterials.map(
-            (
-              material,
-              index,
-            ) => (
-              <div
-                key={index}
-                className={`rounded-3xl p-4 sm:p-5 transition-all hover:scale-[1.01] ${card}`}
-              >
-                {/* TOP */}
+        {loading ? (
+          <div className="py-24 flex justify-center">
+            <Loader2 className="animate-spin w-10 h-10" />
+          </div>
+        ) : (
+          <>
+            {/* ========================================================= */}
+            {/* MATERIALS */}
+            {/* ========================================================= */}
 
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  {/* LEFT */}
+            <div className="grid xl:grid-cols-2 gap-6">
+              {filteredMaterials.map(
+                (
+                  material,
+                  index,
+                ) => (
+                  <div
+                    key={index}
+                    className={`rounded-[36px] p-6 transition-all hover:scale-[1.01] ${card}`}
+                  >
+                    {/* TOP */}
 
-                  <div className="flex items-start gap-4 min-w-0 flex-1">
-                    <div
-                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${material.color} text-white flex items-center justify-center shrink-0`}
-                    >
-                      {
-                        material.icon
-                      }
+                    <div className="flex items-start justify-between gap-4">
+                      {/* LEFT */}
+
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shrink-0">
+                          {material.type ===
+                          "PDF" ? (
+                            <FileText />
+                          ) : material.type ===
+                            "Video" ? (
+                            <Video />
+                          ) : material.type ===
+                            "Notes" ? (
+                            <BookOpen />
+                          ) : (
+                            <BrainCircuit />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <h2 className="text-2xl font-black break-words leading-tight">
+                            {
+                              material.title
+                            }
+                          </h2>
+
+                          <div
+                            className={`flex flex-wrap items-center gap-2 mt-3 text-sm ${fade}`}
+                          >
+                            <span>
+                              {
+                                material.subject
+                              }
+                            </span>
+
+                            <span>
+                              •
+                            </span>
+
+                            <div className="flex items-center gap-1 text-yellow-500">
+                              <Star
+                                size={
+                                  14
+                                }
+                                fill="currentColor"
+                              />
+
+                              5.0
+                            </div>
+
+                            <span>
+                              •
+                            </span>
+
+                            <div className="flex items-center gap-1">
+                              <FolderOpen size={14} />
+
+                              {
+                                material.type
+                              }
+                            </div>
+                          </div>
+
+                          <p
+                            className={`mt-4 text-sm leading-relaxed ${fade}`}
+                          >
+                            {
+                              material.description
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* TYPE */}
+
+                      <div className="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-400 text-xs font-black shrink-0">
+                        {
+                          material.type
+                        }
+                      </div>
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <h2 className="font-bold text-base sm:text-lg md:text-xl leading-tight break-words">
-                        {
-                          material.title
-                        }
-                      </h2>
+                    {/* FOOTER */}
+
+                    <div className="mt-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                      {/* LEFT */}
 
                       <div
-                        className={`flex flex-wrap items-center gap-2 mt-2 text-xs sm:text-sm ${fade}`}
+                        className={`flex flex-wrap items-center gap-4 text-sm ${fade}`}
                       >
-                        <span>
-                          {
-                            material.subject
-                          }
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck size={15} />
 
-                        <span>
-                          •
-                        </span>
-
-                        <span>
-                          {
-                            material.lessons
-                          }{" "}
-                          Lessons
-                        </span>
-
-                        <span>
-                          •
-                        </span>
-
-                        <div className="flex items-center gap-1 text-yellow-500">
-                          <Star
-                            size={14}
-                            fill="currentColor"
-                          />
-
-                          {
-                            material.rating
-                          }
+                          Premium
+                          Protected
                         </div>
+
+                        <div className="flex items-center gap-2">
+                          <CalendarDays size={15} />
+
+                          Recently
+                          Updated
+                        </div>
+                      </div>
+
+                      {/* BUTTONS */}
+
+                      <div className="flex flex-wrap gap-3">
+                        {/* PREVIEW */}
+
+                        <button
+                          onClick={() =>
+                            window.open(
+                              material.fileUrl,
+                              "_blank",
+                            )
+                          }
+                          className={`h-12 px-5 rounded-2xl flex items-center gap-2 font-semibold transition-all ${card}`}
+                        >
+                          <Eye size={17} />
+
+                          Preview
+                        </button>
+
+                        {/* DOWNLOAD */}
+
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              material,
+                            )
+                          }
+                          className={`h-12 px-5 rounded-2xl text-white font-bold flex items-center gap-2 transition-all ${
+                            isPremium
+                              ? "bg-indigo-500 hover:bg-indigo-600"
+                              : "bg-yellow-500 hover:bg-yellow-600"
+                          }`}
+                        >
+                          {isPremium ? (
+                            <>
+                              <Download size={17} />
+
+                              Download
+                            </>
+                          ) : (
+                            <>
+                              <Crown size={17} />
+
+                              Premium
+                            </>
+                          )}
+                        </button>
+
+                        {/* DELETE */}
+
+                        {isAdmin && (
+                          <button
+                            onClick={() =>
+                              handleDelete(
+                                material.id,
+                              )
+                            }
+                            className="h-12 px-4 rounded-2xl bg-red-500 hover:bg-red-600 transition-all text-white"
+                          >
+                            {deletingId ===
+                            material.id ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <Trash2 />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
+                ),
+              )}
+            </div>
 
-                  {/* RIGHT */}
+            {/* ========================================================= */}
+            {/* EMPTY */}
+            {/* ========================================================= */}
 
-                  <div className="flex sm:flex-col lg:flex-row items-start sm:items-end lg:items-center gap-2 shrink-0">
-                    <div
-                      className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap ${
-                        dark
-                          ? "bg-indigo-500/10 text-indigo-400"
-                          : "bg-indigo-100 text-indigo-700"
-                      }`}
-                    >
-                      {
-                        material.type
-                      }
-                    </div>
+            {filteredMaterials.length ===
+              0 && (
+              <div
+                className={`rounded-[36px] p-14 text-center mt-10 ${card}`}
+              >
+                <XCircle
+                  size={60}
+                  className="mx-auto text-indigo-500 mb-5"
+                />
 
-                    <div
-                      className={`flex items-center gap-1 text-xs sm:text-sm ${fade}`}
-                    >
-                      <Download
-                        size={14}
-                      />
+                <h2 className="text-3xl font-black">
+                  No Materials
+                  Found
+                </h2>
 
-                      {
-                        material.downloads
-                      }
-                    </div>
-                  </div>
-                </div>
-
-                {/* FOOTER */}
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-6">
-                  <div
-                    className={`flex items-center gap-2 text-xs sm:text-sm ${fade}`}
-                  >
-                    <Clock3
-                      size={15}
-                    />
-
-                    Updated Recently
-                  </div>
-
-                  {/* BUTTONS */}
-
-                  <div className="flex flex-col xs:flex-row sm:flex-row gap-3 w-full sm:w-auto">
-                    <button
-                      className={`h-11 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${
-                        dark
-                          ? "bg-white/5 hover:bg-white/10"
-                          : "bg-slate-100 hover:bg-slate-200"
-                      }`}
-                    >
-                      <Download
-                        size={16}
-                      />
-
-                      Save
-                    </button>
-
-                    <button className="h-11 px-5 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition-all text-white font-semibold flex items-center justify-center gap-2 w-full sm:w-auto">
-                      <Eye size={16} />
-
-                      Open
-
-                      <ChevronRight
-                        size={16}
-                      />
-                    </button>
-                  </div>
-                </div>
+                <p
+                  className={`mt-3 ${fade}`}
+                >
+                  No study
+                  material
+                  available yet
+                </p>
               </div>
-            ),
-          )}
-        </div>
-
-        {/* ========================= */}
-        {/* EMPTY */}
-        {/* ========================= */}
-
-        {filteredMaterials.length ===
-          0 && (
-          <div
-            className={`mt-10 rounded-3xl p-8 sm:p-12 text-center ${card}`}
-          >
-            <FileText
-              size={50}
-              className="mx-auto mb-4 text-indigo-500"
-            />
-
-            <h2 className="text-xl sm:text-2xl font-bold mb-2">
-              No Materials Found
-            </h2>
-
-            <p
-              className={`text-sm sm:text-base ${fade}`}
-            >
-              Try another keyword
-              or filter category.
-            </p>
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
